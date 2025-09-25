@@ -4,6 +4,7 @@ require('dotenv').config();
 
 // Import routes
 const filmsRouter = require('./routes/films');
+const actorsRouter = require('./routes/actors');
 
 const app = express();
 const PORT = process.env.PORT || 4001;
@@ -17,6 +18,7 @@ app.use(cors({
 
 // Routes
 app.use('/api/films', filmsRouter);
+app.use('/api/actors', actorsRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
