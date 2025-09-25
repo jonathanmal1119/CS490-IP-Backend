@@ -9,19 +9,17 @@ const getTopFilms = async (req, res) => {
     
     const query = `
       SELECT 
-        f.film_id as id,
-        f.title,
-        f.description,
-        f.release_year as releaseYear,
-        c.name as genre,
-        COUNT(r.rental_id) as rentalCount
-      FROM rental r
-      JOIN inventory i ON r.inventory_id = i.inventory_id
-      JOIN film f ON i.film_id = f.film_id
-      JOIN film_category fc ON f.film_id = fc.film_id
-      JOIN category c ON fc.category_id = c.category_id
-      GROUP BY f.film_id, f.title, c.name
-      ORDER BY rentalCount DESC
+        F.film_id as id,
+        F.title,
+        C.name as genre,
+        COUNT(R.rental_id) as rentalCount
+      FROM rental R
+      JOIN inventory I ON R.inventory_id = I.inventory_id
+      JOIN film F ON I.film_id = F.film_id
+      JOIN film_category FC ON F.film_id = FC.film_id
+      JOIN category C ON FC.category_id = C.category_id
+      GROUP BY F.film_id, F.title, C.name
+      ORDER BY COUNT(R.rental_id) DESC
       LIMIT ?
     `;
     
