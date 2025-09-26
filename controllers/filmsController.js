@@ -39,8 +39,70 @@ const getTopFilms = async (req, res) => {
 };
 
 
+const getFilmDetails = async (req, res) => {
+  try {
+    const filmId = req.params.id;
+    
+    const query = `
+      SELECT 
+        F.film_id as id,
+        F.title,
+        F.description,
+        F.release_year as releaseYear,
+        F.rating,
+        F.length,
+        F.replacement_cost as replacementCost,
+        F.rental_rate as rentalRate,
+        F.rental_duration as rentalDuration,
+        C.name as category,
+        L.name as language
+      FROM film F
+      JOIN film_category FC ON F.film_id = FC.film_id
+      JOIN category C ON FC.category_id = C.category_id
+      JOIN language L ON F.language_id = L.language_id
+      WHERE F.film_id = ?
+    `;
+    
+    const film = await executeQuerySingle(query, [filmId]);
+    
+    if (!film) {
+      return res.status(404).json({
+        success: false,
+        error: 'Film not found'
+      });
+    }
+    
+    const actorsQuery = `
+      SELECT 
+        A.actor_id as id,
+        CONCAT(A.first_name, ' ', A.last_name) as name
+      FROM actor A
+      JOIN film_actor FA ON A.actor_id = FA.actor_id
+      WHERE FA.film_id = ?
+      ORDER BY A.last_name, A.first_name
+    `;
+    
+    const actors = await executeQuery(actorsQuery, [filmId]);
+    
+    res.json({
+      success: true,
+      data: {
+        ...film,
+        actors
+      }
+    });
+  } catch (error) {
+    console.error('Error getting film details:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
 module.exports = {
-  getTopFilms
+  getTopFilms,
+  getFilmDetails
 };
 
 

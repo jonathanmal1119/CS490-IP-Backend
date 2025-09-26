@@ -1,10 +1,10 @@
 const express = require('express');
-const { getTopFilms } = require('../controllers/filmsController');
+const { getTopFilms, getFilmDetails } = require('../controllers/filmsController');
 
 const router = express.Router();
 
-// Routes
 router.get('/top', getTopFilms);
+router.get('/:id', getFilmDetails);
 
 module.exports = router;
 
