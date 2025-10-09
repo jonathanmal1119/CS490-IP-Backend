@@ -136,7 +136,9 @@ const getCustomerById = async (req, res) => {
 const updateCustomer = async (req, res) => {
   try {
     const customerId = req.params.id;
-    const { first_name, last_name, email, phone, active } = req.body;
+    const { first_name, last_name, email, phone, address, district, city, country_id, active } = req.body;
+    
+    console.log('Update customer request:', { customerId, first_name, last_name, email, phone, address, district, city, country_id, active });
     
     if (!first_name || !last_name || !email) {
       return res.status(400).json({
@@ -145,19 +147,50 @@ const updateCustomer = async (req, res) => {
       });
     }
     
-    const getAddressQuery = `
-      SELECT address_id FROM customer WHERE customer_id = ?
+    const getCustomerQuery = `
+      SELECT customer.address_id, address.city_id FROM customer 
+      JOIN address ON customer.address_id = address.address_id
+      WHERE customer_id = ?
     `;
-    const addressResult = await executeQuery(getAddressQuery, [customerId]);
+    const customerResult = await executeQuery(getCustomerQuery, [customerId]);
     
-    if (addressResult.length === 0) {
+    if (customerResult.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Customer not found'
       });
     }
     
-    const addressId = addressResult[0].address_id;
+    const addressId = customerResult[0].address_id;
+    const currentCityId = customerResult[0].city_id;
+    
+    console.log('Current address info:', { addressId, currentCityId });
+    
+    let cityId = currentCityId;
+    
+    // Handle city update if city or country_id is provided
+    if (city && country_id) {
+      console.log('Checking/creating city:', { city, country_id });
+      // Check if city already exists
+      const existingCityQuery = `
+        SELECT city_id FROM city WHERE city = ? AND country_id = ? LIMIT 1
+      `;
+      const existingCity = await executeQuery(existingCityQuery, [city, country_id]);
+      
+      if (existingCity.length > 0) {
+        cityId = existingCity[0].city_id;
+        console.log('Using existing city_id:', cityId);
+      } else {
+        // Create new city
+        const createCityQuery = `
+          INSERT INTO city (city, country_id, last_update)
+          VALUES (?, ?, NOW())
+        `;
+        const cityResult = await executeQuery(createCityQuery, [city, country_id]);
+        cityId = cityResult.insertId;
+        console.log('Created new city_id:', cityId);
+      }
+    }
     
     const updateCustomerQuery = `
       UPDATE customer 
@@ -165,14 +198,19 @@ const updateCustomer = async (req, res) => {
       WHERE customer_id = ?
     `;
     
-    // Update address with phone
+    // Update address with all fields
     const updateAddressQuery = `
       UPDATE address 
-      SET phone = ?, last_update = NOW()
+      SET address = ?, district = ?, city_id = ?, phone = ?, last_update = NOW()
       WHERE address_id = ?
     `;
     
-    await Promise.all([
+    console.log('Executing updates with:', {
+      customer: { first_name, last_name, email, active: active ? 1 : 0, customerId },
+      address: { address, district, cityId, phone, addressId }
+    });
+    
+    const results = await Promise.all([
       executeQuery(updateCustomerQuery, [
         first_name,
         last_name,
@@ -181,10 +219,15 @@ const updateCustomer = async (req, res) => {
         customerId
       ]),
       executeQuery(updateAddressQuery, [
+        address || '',
+        district || '',
+        cityId,
         phone || '',
         addressId
       ])
     ]);
+    
+    console.log('Update results:', results);
     
     res.json({
       success: true,
@@ -287,7 +330,6 @@ const getCountries = async (req, res) => {
     `;
     
     const countries = await executeQuery(query);
-    console.log('Countries found:', countries.length);
     
     res.json({
       success: true,
