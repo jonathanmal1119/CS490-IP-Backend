@@ -302,12 +302,100 @@ const getCountries = async (req, res) => {
   }
 };
 
+const checkCustomerRentals = async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    
+    const rentalQuery = `
+      SELECT COUNT(*) as activeRentals
+      FROM rental R
+      WHERE R.customer_id = ? AND R.return_date IS NULL
+    `;
+    
+    const result = await executeQuery(rentalQuery, [customerId]);
+    const activeRentals = result[0].activeRentals;
+    
+    res.json({
+      success: true,
+      data: {
+        hasActiveRentals: activeRentals > 0,
+        activeRentalCount: activeRentals
+      }
+    });
+  } catch (error) {
+    console.error('Error checking customer rentals:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
+const deleteCustomer = async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    
+    // First check if customer has active rentals
+    const rentalQuery = `
+      SELECT COUNT(*) as activeRentals
+      FROM rental R
+      WHERE R.customer_id = ? AND R.return_date IS NULL
+    `;
+    
+    const rentalResult = await executeQuery(rentalQuery, [customerId]);
+    const activeRentals = rentalResult[0].activeRentals;
+    
+    if (activeRentals > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete customer. Customer has ${activeRentals} active rental(s).`
+      });
+    }
+    
+    // Get customer info for cleanup
+    const customerQuery = `
+      SELECT address_id FROM customer WHERE customer_id = ?
+    `;
+    const customerResult = await executeQuery(customerQuery, [customerId]);
+    
+    if (customerResult.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Customer not found'
+      });
+    }
+    
+    const addressId = customerResult[0].address_id;
+    
+    // Delete customer first, then address (to respect foreign key constraints)
+    const deleteCustomerQuery = `DELETE FROM customer WHERE customer_id = ?`;
+    const deleteAddressQuery = `DELETE FROM address WHERE address_id = ?`;
+    
+    // Delete customer first, then address
+    await executeQuery(deleteCustomerQuery, [customerId]);
+    await executeQuery(deleteAddressQuery, [addressId]);
+    
+    res.json({
+      success: true,
+      message: 'Customer deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting customer:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
 module.exports = {
   getCustomers,
   getCustomerById,
   updateCustomer,
   createCustomer,
-  getCountries
+  getCountries,
+  checkCustomerRentals,
+  deleteCustomer
 };
 
 
