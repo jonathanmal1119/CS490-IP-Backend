@@ -240,11 +240,159 @@ const getRecentFilms = async (req, res) => {
   }
 };
 
+// @desc    Check available inventory for a film
+// @route   GET /api/films/:id/inventory
+// @access  Public
+const checkInventory = async (req, res) => {
+  try {
+    const filmId = req.params.id;
+    
+    const query = `
+      SELECT 
+        I.inventory_id,
+        I.store_id,
+        CASE 
+          WHEN R.rental_id IS NULL OR R.return_date IS NOT NULL THEN 1
+          ELSE 0
+        END as available
+      FROM inventory I
+      LEFT JOIN rental R ON I.inventory_id = R.inventory_id
+        AND R.return_date IS NULL
+      WHERE I.film_id = ?
+      HAVING available = 1
+      LIMIT 1
+    `;
+    
+    const inventory = await executeQuery(query, [filmId]);
+    
+    res.json({
+      success: true,
+      data: {
+        available: inventory.length > 0,
+        inventory_id: inventory.length > 0 ? inventory[0].inventory_id : null
+      }
+    });
+  } catch (error) {
+    console.error('Error checking inventory:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
+// @desc    Rent a film to a customer
+// @route   POST /api/films/:id/rent
+// @access  Public
+const rentFilm = async (req, res) => {
+  try {
+    const filmId = req.params.id;
+    const { customer_id } = req.body;
+    
+    console.log('Rent film request:', { filmId, customer_id });
+    
+    if (!customer_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Customer ID is required'
+      });
+    }
+    
+    // Verify customer exists
+    const customerQuery = `SELECT customer_id FROM customer WHERE customer_id = ?`;
+    const customer = await executeQuerySingle(customerQuery, [customer_id]);
+    
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        error: 'Customer not found'
+      });
+    }
+    
+    // Check if film exists and get rental info
+    const filmQuery = `SELECT film_id, rental_duration, rental_rate FROM film WHERE film_id = ?`;
+    const film = await executeQuerySingle(filmQuery, [filmId]);
+    
+    if (!film) {
+      return res.status(404).json({
+        success: false,
+        error: 'Film not found'
+      });
+    }
+    
+    // Find available inventory
+    const inventoryQuery = `
+      SELECT 
+        I.inventory_id,
+        I.store_id
+      FROM inventory I
+      LEFT JOIN rental R ON I.inventory_id = R.inventory_id
+        AND R.return_date IS NULL
+      WHERE I.film_id = ? AND R.rental_id IS NULL
+      LIMIT 1
+    `;
+    
+    const inventory = await executeQuerySingle(inventoryQuery, [filmId]);
+    
+    if (!inventory) {
+      return res.status(400).json({
+        success: false,
+        error: 'No copies of this film are currently available for rent'
+      });
+    }
+    
+    // Get staff_id for the store (just use the first staff member of the store)
+    const staffQuery = `SELECT staff_id FROM staff WHERE store_id = ? LIMIT 1`;
+    const staff = await executeQuerySingle(staffQuery, [inventory.store_id]);
+    
+    if (!staff) {
+      return res.status(500).json({
+        success: false,
+        error: 'No staff available for this rental'
+      });
+    }
+    
+    // Create rental record
+    const rentalQuery = `
+      INSERT INTO rental (rental_date, inventory_id, customer_id, return_date, staff_id, last_update)
+      VALUES (NOW(), ?, ?, NULL, ?, NOW())
+    `;
+    
+    const result = await executeQuery(rentalQuery, [
+      inventory.inventory_id,
+      customer_id,
+      staff.staff_id
+    ]);
+    
+    console.log('Rental created:', result);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Film rented successfully',
+      data: {
+        rental_id: result.insertId,
+        inventory_id: inventory.inventory_id,
+        customer_id: customer_id,
+        rental_duration: film.rental_duration,
+        rental_rate: film.rental_rate
+      }
+    });
+  } catch (error) {
+    console.error('Error renting film:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
 module.exports = {
   getTopFilms,
   getFilmDetails,
   searchFilms,
-  getRecentFilms
+  getRecentFilms,
+  checkInventory,
+  rentFilm
 };
 
 
