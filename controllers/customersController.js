@@ -430,6 +430,53 @@ const deleteCustomer = async (req, res) => {
   }
 };
 
+// @desc    Get customer rental history
+// @route   GET /api/customers/:id/rental-history
+// @access  Public
+const getCustomerRentalHistory = async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    
+    const rentalQuery = `
+      SELECT 
+        R.rental_id,
+        R.rental_date,
+        R.return_date,
+        F.film_id,
+        F.title as film_title,
+        F.rental_rate,
+        F.rental_duration,
+        CASE 
+          WHEN R.return_date IS NULL THEN 'Active'
+          ELSE 'Returned'
+        END as status,
+        CASE 
+          WHEN R.return_date IS NULL THEN DATEDIFF(NOW(), R.rental_date)
+          ELSE DATEDIFF(R.return_date, R.rental_date)
+        END as days_rented
+      FROM rental R
+      JOIN inventory I ON R.inventory_id = I.inventory_id
+      JOIN film F ON I.film_id = F.film_id
+      WHERE R.customer_id = ?
+      ORDER BY R.rental_date DESC
+      LIMIT 50
+    `;
+    
+    const rentals = await executeQuery(rentalQuery, [customerId]);
+    
+    res.json({
+      success: true,
+      data: rentals
+    });
+  } catch (error) {
+    console.error('Error getting rental history:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
 module.exports = {
   getCustomers,
   getCustomerById,
@@ -437,7 +484,8 @@ module.exports = {
   createCustomer,
   getCountries,
   checkCustomerRentals,
-  deleteCustomer
+  deleteCustomer,
+  getCustomerRentalHistory
 };
 
 
