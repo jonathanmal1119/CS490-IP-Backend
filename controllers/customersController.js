@@ -6,20 +6,37 @@ const getCustomers = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
     const search = req.query.search || '';
+    const searchType = req.query.searchType || 'all';
     
     let whereClause = '';
     let queryParams = [];
     
     if (search.trim()) {
-      whereClause = `
-        WHERE (
-          CAST(C.customer_id AS CHAR) LIKE ? OR
-          C.first_name LIKE ? OR
-          C.last_name LIKE ?
-        )
-      `;
       const searchPattern = `%${search.trim()}%`;
-      queryParams = [searchPattern, searchPattern, searchPattern];
+      
+      switch(searchType) {
+        case 'id':
+          whereClause = `WHERE CAST(C.customer_id AS CHAR) LIKE ?`;
+          queryParams = [searchPattern];
+          break;
+        case 'firstName':
+          whereClause = `WHERE C.first_name LIKE ?`;
+          queryParams = [searchPattern];
+          break;
+        case 'lastName':
+          whereClause = `WHERE C.last_name LIKE ?`;
+          queryParams = [searchPattern];
+          break;
+        default: // 'all'
+          whereClause = `
+            WHERE (
+              CAST(C.customer_id AS CHAR) LIKE ? OR
+              C.first_name LIKE ? OR
+              C.last_name LIKE ?
+            )
+          `;
+          queryParams = [searchPattern, searchPattern, searchPattern];
+      }
     }
     
     const customersQuery = `
