@@ -386,13 +386,74 @@ const rentFilm = async (req, res) => {
   }
 };
 
+// @desc    Return a rented film
+// @route   PUT /api/films/rentals/:rentalId/return
+// @access  Public
+const returnFilm = async (req, res) => {
+  try {
+    const rentalId = req.params.rentalId;
+    
+    console.log('Return film request for rental ID:', rentalId);
+    
+    // Check if rental exists and is not already returned
+    const rentalQuery = `
+      SELECT rental_id, return_date, customer_id
+      FROM rental
+      WHERE rental_id = ?
+    `;
+    
+    const rental = await executeQuerySingle(rentalQuery, [rentalId]);
+    
+    if (!rental) {
+      return res.status(404).json({
+        success: false,
+        error: 'Rental not found'
+      });
+    }
+    
+    if (rental.return_date) {
+      return res.status(400).json({
+        success: false,
+        error: 'This rental has already been returned'
+      });
+    }
+    
+    // Update rental with return date
+    const updateQuery = `
+      UPDATE rental
+      SET return_date = NOW(), last_update = NOW()
+      WHERE rental_id = ?
+    `;
+    
+    await executeQuery(updateQuery, [rentalId]);
+    
+    console.log('Film returned successfully for rental ID:', rentalId);
+    
+    res.json({
+      success: true,
+      message: 'Film returned successfully',
+      data: {
+        rental_id: rentalId,
+        return_date: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Error returning film:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server Error'
+    });
+  }
+};
+
 module.exports = {
   getTopFilms,
   getFilmDetails,
   searchFilms,
   getRecentFilms,
   checkInventory,
-  rentFilm
+  rentFilm,
+  returnFilm
 };
 
 

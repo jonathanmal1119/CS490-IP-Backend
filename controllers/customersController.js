@@ -377,11 +377,11 @@ const deleteCustomer = async (req, res) => {
   try {
     const customerId = req.params.id;
     
-    // First check if customer has active rentals
+    // Check if customer has any ACTIVE rentals (unreturned films)
     const rentalQuery = `
       SELECT COUNT(*) as activeRentals
-      FROM rental R
-      WHERE R.customer_id = ? AND R.return_date IS NULL
+      FROM rental
+      WHERE customer_id = ? AND return_date IS NULL
     `;
     
     const rentalResult = await executeQuery(rentalQuery, [customerId]);
@@ -390,7 +390,7 @@ const deleteCustomer = async (req, res) => {
     if (activeRentals > 0) {
       return res.status(400).json({
         success: false,
-        error: `Cannot delete customer. Customer has ${activeRentals} active rental(s).`
+        error: `Cannot delete customer. Customer has ${activeRentals} active rental(s). Please return all rentals before deleting.`
       });
     }
     
@@ -409,12 +409,21 @@ const deleteCustomer = async (req, res) => {
     
     const addressId = customerResult[0].address_id;
     
-    // Delete customer first, then address (to respect foreign key constraints)
-    const deleteCustomerQuery = `DELETE FROM customer WHERE customer_id = ?`;
-    const deleteAddressQuery = `DELETE FROM address WHERE address_id = ?`;
+    // Delete in order to respect foreign key constraints:
+    // 1. Delete payments (references customer and rental)
+    const deletePaymentsQuery = `DELETE FROM payment WHERE customer_id = ?`;
+    await executeQuery(deletePaymentsQuery, [customerId]);
     
-    // Delete customer first, then address
+    // 2. Delete rental records (references customer)
+    const deleteRentalsQuery = `DELETE FROM rental WHERE customer_id = ?`;
+    await executeQuery(deleteRentalsQuery, [customerId]);
+    
+    // 3. Delete customer
+    const deleteCustomerQuery = `DELETE FROM customer WHERE customer_id = ?`;
     await executeQuery(deleteCustomerQuery, [customerId]);
+    
+    // 4. Delete address
+    const deleteAddressQuery = `DELETE FROM address WHERE address_id = ?`;
     await executeQuery(deleteAddressQuery, [addressId]);
     
     res.json({
